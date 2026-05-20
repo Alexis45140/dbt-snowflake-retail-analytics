@@ -1,0 +1,13 @@
+# Environnement virtuel Python
+.venv/
+venv/
+
+# Fichiers de compilation dbt
+target/
+dbt_packages/
+logs/
+
+# SÉCURITÉ : Clés privées et profils s'ils sont dans le dossier
+*.p8
+*.yml.local
+profiles.yml

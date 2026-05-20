@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: stg_ventes
+    columns:
+      - name: transaction_id
+        tests:
+          - unique
+          - not_null
+      - name: montant_total
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
