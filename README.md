@@ -1,7 +1,3 @@
-Voici le contenu exact du fichier `README.md` formaté en **Markdown pur**.
-
-Tu as juste à cliquer sur l'icône de copie en haut à droite du bloc noir ci-dessous et à le coller directement dans ton fichier `README.md` sur ton ordinateur (avec VS Code ou un bloc-notes) ou directement sur l'interface de GitHub.
-
 ```markdown
 # 🛍️ Pipeline Data ELT & Analyse des Ventes Retail (dbt Core × Snowflake × Tableau)
 
