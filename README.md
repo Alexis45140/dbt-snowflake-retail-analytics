@@ -242,12 +242,12 @@ mon_projet:
   outputs:
     dev:
       type: snowflake
-      account: QYWJEWA-FZ21738
-      user: dbt_user
-      password: PASSWORD
+      account: TON_ACCOUNT        # ex: abc123.eu-west-1
+      user: TON_USER
+      password: TON_PASSWORD
       database: ANALYTICS
       schema: ANALYTICS
-      warehouse: TRANSFORMING_WH
+      warehouse: TON_WAREHOUSE
 ```
 
 ### Déploiement
