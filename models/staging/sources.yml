@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: retail
+    database: ANALYTICS
+    schema: ANALYTICS
+    tables:
+      - name: retail_sales_dataset
