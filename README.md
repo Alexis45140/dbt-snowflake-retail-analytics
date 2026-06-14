@@ -1,8 +1,3 @@
-Voici le contenu exact du fichier `README.md` formaté en **Markdown pur**.
-
-Tu as juste à cliquer sur l'icône de copie en haut à droite du bloc noir ci-dessous et à le coller directement dans ton fichier `README.md` sur ton ordinateur (avec VS Code ou un bloc-notes) ou directement sur l'interface de GitHub.
-
-```markdown
 # 🛍️ Pipeline Data ELT & Analyse des Ventes Retail (dbt Core × Snowflake × Tableau)
 
 Ce dépôt héberge un projet complet de **Modern Data Stack** simulant un environnement de production pour un **Analytics Engineer**. L'objectif est d'ingérer des données brutes de ventes au détail (Retail), de les stocker dans un entrepôt de données **Snowflake**, d'appliquer des transformations modulaires avec **dbt Core**, de valider la qualité des données via des tests automatisés, et de restituer des indicateurs clés (KPIs) sous forme de tableau de bord interactif dans **Tableau**.
@@ -140,7 +135,7 @@ Les données agrégées issues de la table de Marts `ANALYSE_VENTES` ont été e
 * **Analyse Segmentée (Bas gauche)** : Graphique en barres horizontales classant la performance financière des différentes catégories de produits (Électronique, Vêtements, Beauté, etc.).
 * **Filtres Dynamiques** : Possibilité de filtrer l'intégralité du tableau de bord au clic sur une catégorie ou un mois spécifique pour une exploration granulaire.
 
-👉 **[Consulter le Tableau de bord interactif en ligne](https://www.google.com/search?q=METS_TON_LIEN_TABLEAU_PUBLIC_ICI)**
+👉 **[Consulter le Tableau de bord interactif en ligne](https://public.tableau.com/app/profile/alexis.claudeon/viz/ExecutiveSalesDashboard-RetailAnalytics/Tableaudebord1)**
 
 > *Note d'architecture : Pour les besoins de la publication sur la version gratuite de Tableau Public, les données nettoyées ont été extraites sous forme de Snapshot CSV sécurisé. En environnement d'entreprise réel, Tableau Desktop maintient une connexion en direct (Live/Extract planifié) avec le warehouse Snowflake (`TRANSFORMING_WH`) pour un rafraîchissement 100% automatisé.*
 
@@ -186,9 +181,9 @@ dbt run
 
 # 4. Lancer la suite de tests automatisés pour valider la qualité des données
 dbt test
-
 ```
 
-```
-
-```
+## 👤 CONTACT
+**Alexis Claudeon**
+* [Mon Profil LinkedIn](https://www.linkedin.com/in/alexis-claudeon/)
+* [Mon Portfolio](https://github.com/alexis45140)
