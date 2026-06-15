@@ -204,7 +204,7 @@ Les marts dbt alimentent un dashboard interactif comprenant :
 - **Évolution mensuelle** — Courbe de tendance des ventes sur l'année
 - **Performance par catégorie** — Comparaison Beauty / Clothing / Electronics
 
-👉 **[Consulter le dashboard interactif](https://public.tableau.com/views/ExecutiveSalesDashboard-RetailAnalytics/Feuille2?:language=fr-FR&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)**
+👉 **[Consulter le dashboard interactif](https://public.tableau.com/views/RetailAnalyticsSalesDashboard_17815243980290/Tableaudebord1?:language=fr-FR&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)**
 
 > *Note : Pour Tableau Public (version gratuite), les données sont exportées en CSV depuis Snowflake. En environnement d'entreprise, Tableau Desktop maintient une connexion live avec Snowflake pour un rafraîchissement automatisé.*
 
