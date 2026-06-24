@@ -9,6 +9,7 @@ logs/
 
 # SÉCURITÉ : Clés privées et profils
 *.p8
+*.pub
 *.yml.local
 profiles.yml
 *.pub

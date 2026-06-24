@@ -1,114 +1,180 @@
-# 🛍️ Pipeline Data ELT & Analyse des Ventes Retail (dbt Core × Snowflake × Tableau)
+# 🛍️ Pipeline Data ELT — Retail Analytics (dbt Core × Snowflake × Tableau)
 
-Ce dépôt héberge un projet complet de **Modern Data Stack** simulant un environnement de production pour un **Analytics Engineer**. L'objectif est d'ingérer des données brutes de ventes au détail (Retail), de les stocker dans un entrepôt de données **Snowflake**, d'appliquer des transformations modulaires avec **dbt Core**, de valider la qualité des données via des tests automatisés, et de restituer des indicateurs clés (KPIs) sous forme de tableau de bord interactif dans **Tableau**.
+Ce dépôt héberge un projet complet de **Modern Data Stack** simulant un environnement de production pour un **Analytics Engineer**. L'objectif est d'ingérer des données brutes de ventes au détail, de les transformer avec **dbt Core** dans **Snowflake**, de valider la qualité des données via des tests automatisés, et de restituer des KPIs dans un **dashboard Tableau interactif**.
 
 ---
 
 ## 🏗️ Architecture Globale du Pipeline (ELT)
 
-Le pipeline suit une approche moderne de type **ELT** (Extract, Load, Transform) où les transformations s'exécutent directement au sein de la puissance de calcul du cloud data warehouse.
+```
+CSV (1 000 transactions)
+        ↓
+   Snowflake (ANALYTICS.ANALYTICS)
+        ↓
+   dbt Core — Staging (stg_retail)
+        ↓
+   dbt Core — Marts (mart_kpis / mart_ca_mensuel / mart_performance_categorie)
+        ↓
+   Tableau Public (Dashboard interactif)
+```
 
-1. **Ingestion (Load)** : Chargement du fichier brut `retail_sales_dataset.csv` (1 000 transactions) dans la base de données Snowflake via la fonctionnalité `dbt seed`.
-2. **Transformation - Couche Staging** : Nettoyage, normalisation de la casse Snowflake (conversion des majuscules contraignantes en minuscules), typage précis (*casting*) et renommage des colonnes.
-3. **Transformation - Couche Marts** : Modélisation dimensionnelle orientée métier. Agrégation mensuelle et par catégorie de produits pour calculer les indicateurs financiers indispensables au pilotage.
-4. **Qualité des Données (Data Quality)** : Exécution de tests automatisés (contraintes d'intégrité et règles métiers) pour valider la fiabilité du modèle final.
-5. **Restitution (BI)** : Modélisation visuelle et analytique des données transformées sur Tableau.
+Le pipeline suit une approche **ELT** moderne :
+
+1. **Extract & Load** — Chargement du fichier CSV brut dans Snowflake via `dbt seed`
+2. **Staging** — Nettoyage, typage et normalisation des colonnes (snake_case, casting Snowflake)
+3. **Marts** — Modélisation orientée métier : KPIs globaux, évolution mensuelle, performance par catégorie
+4. **Data Quality** — Tests automatisés (unicité, nullité, plages de valeurs) via dbt native + `dbt_expectations`
+5. **BI** — Restitution visuelle sur Tableau Public
 
 ---
 
 ## 🛠️ Stack Technique
 
-* **Entrepôt de Données** : Snowflake Cloud Data Warehouse (Virtual Warehouse dédié : `TRANSFORMING_WH`)
-* **Transformation & Modélisation** : dbt Core v1.11 (SQL modularisé par références)
-* **Qualité des Données** : dbt Native Tests & Framework `dbt_expectations`
-* **Visualisation BI** : Tableau Public
-* **Gestion de Version** : Git & GitHub
+| Outil | Rôle |
+|---|---|
+| **Snowflake** | Cloud Data Warehouse — stockage et calcul |
+| **dbt Core v1.11** | Transformation SQL modulaire — staging et marts |
+| **dbt_expectations** | Tests avancés de qualité des données |
+| **Tableau Public** | Visualisation et dashboard interactif |
+| **Git & GitHub** | Versioning et collaboration |
 
 ---
 
-## 📂 Structure du Projet dbt
+## 📂 Structure du Projet
 
-```text
-mon_projet/
-├── .gitignore               # Fichiers et dossiers exclus du versioning (ex: .venv, target)
-├── README.md                # Documentation principale du projet
-├── dbt_project.yml          # Fichier de configuration global du projet dbt
-├── packages.yml             # Gestion des dépendances dbt (dbt_expectations)
+```
+dbt-snowflake-retail-analytics/
+├── README.md
+├── dbt_project.yml
+├── packages.yml
 ├── seeds/
-│   └── retail_sales_dataset.csv  # Données sources brutes de ventes
+│   └── retail_sales_dataset.csv
 └── models/
     ├── staging/
-    │   └── stg_ventes.sql   # Vue de nettoyage et normalisation des colonnes
+    │   ├── sources.yml
+    │   └── stg_retail.sql
     ├── marts/
-    │   └── analyse_ventes.sql # Table d'agrégation décisionnelle pour la BI
-    └── schema.yml           # Déclaration des modèles et tests de qualité des données
-
+    │   ├── mart_kpis.sql
+    │   ├── mart_ca_mensuel.sql
+    │   └── mart_performance_categorie.sql
+    └── schema.yml
 ```
 
 ---
 
-## 🧬 Détail des Couches de Transformation
+## 🧬 Détail des Modèles dbt
 
-### 1. Couche Staging (`models/staging/stg_ventes.sql`)
+### 1. Couche Staging — `stg_retail.sql` (Vue)
 
-Cette couche isole les données brutes. Snowflake indexant par défaut en lettres majuscules avec une sensibilité à la casse lors de l'ingestion, ce modèle normalise la structure en *snake_case* propre et applique le bon typage de données.
+Isole la donnée brute. Normalise les colonnes Snowflake (majuscules → snake_case), applique le typage précis et enrichit avec des colonnes calculées (mois, année, tranche d'âge).
 
 ```sql
 {{ config(materialized='view') }}
 
-SELECT
-    "TRANSACTION_ID"::int as transaction_id,
-    "DATE"::date as date_transaction,
-    "CUSTOMER_ID"::int as customer_id,
-    "GENDER"::text as genre,
-    "AGE"::int as age,
-    "PRODUCT_CATEGORY"::text as categorie_produit,
-    "QUANTITY"::int as quantite,
-    "PRICE_PER_UNIT"::float as prix_unitaire,
-    "TOTAL_AMOUNT"::float as montant_total
-FROM {{ ref('retail_sales_dataset') }}
+WITH source AS (
+    SELECT * FROM {{ source('retail', 'retail_sales_dataset') }}
+),
 
+renamed AS (
+    SELECT
+        "TRANSACTION_ID"::int           AS transaction_id,
+        "DATE"::date                    AS date_transaction,
+        "CUSTOMER_ID"::text             AS customer_id,
+        "GENDER"::text                  AS genre,
+        "AGE"::int                      AS age,
+        "PRODUCT_CATEGORY"::text        AS categorie_produit,
+        "QUANTITY"::int                 AS quantite,
+        "PRICE_PER_UNIT"::float         AS prix_unitaire,
+        "TOTAL_AMOUNT"::float           AS montant_total,
+        EXTRACT(MONTH FROM "DATE"::date)    AS mois,
+        EXTRACT(YEAR FROM "DATE"::date)     AS annee,
+        DATE_TRUNC('month', "DATE"::date)   AS mois_debut,
+        CASE
+            WHEN "AGE"::int < 25 THEN '18-24'
+            WHEN "AGE"::int < 35 THEN '25-34'
+            WHEN "AGE"::int < 45 THEN '35-44'
+            WHEN "AGE"::int < 55 THEN '45-54'
+            ELSE '55+'
+        END AS tranche_age,
+        CURRENT_TIMESTAMP AS loaded_at
+    FROM source
+    WHERE "TOTAL_AMOUNT"::float > 0
+      AND "TRANSACTION_ID" IS NOT NULL
+)
+
+SELECT * FROM renamed
 ```
 
-### 2. Couche Marts (`models/marts/analyse_ventes.sql`)
+---
 
-Cette couche combine les données pour créer une table agrégée, optimisée pour les outils de Business Intelligence et les analyses métiers complexes.
+### 2. Couche Marts — 3 tables orientées métier
+
+#### `mart_kpis.sql` — KPIs Globaux (Table)
 
 ```sql
-SELECT 
-    categorie_produit,
-    date_trunc('month', date_transaction) as mois,
-    sum(montant_total) as chiffre_affaires,
-    sum(quantite) as volume_vendu,
-    avg(montant_total) as panier_moyen,
-    count(distinct transaction_id) as nombre_transactions
-FROM {{ ref('stg_ventes') }}
-GROUP BY 1, 2
-ORDER BY 2 DESC, 3 DESC
+{{ config(materialized='table') }}
 
+SELECT
+    SUM(montant_total)                AS ca_total,
+    COUNT(transaction_id)             AS nb_commandes,
+    ROUND(AVG(montant_total), 2)      AS panier_moyen,
+    COUNT(DISTINCT categorie_produit) AS nb_categories,
+    COUNT(DISTINCT customer_id)       AS nb_clients,
+    MIN(date_transaction)             AS premiere_vente,
+    MAX(date_transaction)             AS derniere_vente
+FROM {{ ref('stg_retail') }}
+```
+
+#### `mart_ca_mensuel.sql` — Évolution Mensuelle (Table)
+
+```sql
+{{ config(materialized='table') }}
+
+SELECT
+    mois_debut,
+    annee,
+    mois,
+    COUNT(transaction_id)        AS nb_commandes,
+    SUM(montant_total)           AS ca_mensuel,
+    ROUND(AVG(montant_total), 2) AS panier_moyen,
+    COUNT(DISTINCT customer_id)  AS nb_clients
+FROM {{ ref('stg_retail') }}
+GROUP BY mois_debut, annee, mois
+ORDER BY mois_debut
+```
+
+#### `mart_performance_categorie.sql` — Performance par Catégorie (Table)
+
+```sql
+{{ config(materialized='table') }}
+
+SELECT
+    categorie_produit,
+    COUNT(transaction_id)        AS nb_commandes,
+    SUM(montant_total)           AS ca_total,
+    ROUND(AVG(montant_total), 2) AS panier_moyen,
+    COUNT(DISTINCT customer_id)  AS nb_clients,
+    ROUND(
+        SUM(montant_total) * 100.0 /
+        SUM(SUM(montant_total)) OVER (), 1
+    )                            AS part_ca_pct
+FROM {{ ref('stg_retail') }}
+GROUP BY categorie_produit
+ORDER BY ca_total DESC
 ```
 
 ---
 
 ## 🧪 Qualité des Données & Tests Automatisés
 
-Pour garantir le principe de "Single Source of Truth" (Source unique de vérité), des tests d'intégrité stricts sont déclarés dans le fichier `models/schema.yml`.
-
-* **Tests Natifs** :
-* `unique` sur `transaction_id` : Garantit l'absence totale de doublons dans les transactions.
-* `not_null` sur `transaction_id` : S'assure qu'aucune vente n'est orpheline d'identifiant.
-
-
-* **Tests Avancés (`dbt_expectations`)** :
-* Validation métier sur la colonne `montant_total` : Interdiction de valeurs de vente négatives ou égales à zéro via le test `expect_column_values_to_be_between`.
-
-
+Tests déclarés dans `models/schema.yml` pour garantir le principe de **Single Source of Truth** :
 
 ```yaml
 version: 2
 
 models:
-  - name: stg_ventes
+  - name: stg_retail
+    description: "Staging retail — données nettoyées et typées"
     columns:
       - name: transaction_id
         tests:
@@ -116,74 +182,99 @@ models:
           - not_null
       - name: montant_total
         tests:
+          - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               arguments:
                 min_value: 0
-
+                max_value: 10000
+      - name: categorie_produit
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Beauty', 'Clothing', 'Electronics']
 ```
 
 ---
 
-## 📊 Restitution & Tableau de Bord Interactif (Tableau)
+## 📊 Dashboard Tableau Public
 
-Les données agrégées issues de la table de Marts `ANALYSE_VENTES` ont été exploitées graphiquement afin de fournir un outil d'aide à la décision pour les équipes dirigeantes (*Executive Sales Dashboard*).
+Les marts dbt alimentent un dashboard interactif comprenant :
 
-### Éléments clés du Dashboard :
+- **KPIs globaux** — CA total, nombre de commandes, panier moyen
+- **Évolution mensuelle** — Courbe de tendance des ventes sur l'année
+- **Performance par catégorie** — Comparaison Beauty / Clothing / Electronics
 
-* **Section KPI (Haut)** : Chiffre d'Affaires Global (somme), Volumes de pièces vendues et Panier Moyen par transaction.
-* **Analyse Temporelle (Centre)** : Graphique linéaire affichant la tendance historique des ventes mois par mois pour identifier la saisonnalité.
-* **Analyse Segmentée (Bas gauche)** : Graphique en barres horizontales classant la performance financière des différentes catégories de produits (Électronique, Vêtements, Beauté, etc.).
-* **Filtres Dynamiques** : Possibilité de filtrer l'intégralité du tableau de bord au clic sur une catégorie ou un mois spécifique pour une exploration granulaire.
+👉 **[Consulter le dashboard interactif](https://public.tableau.com/views/RetailAnalyticsSalesDashboard_17815243980290/Tableaudebord1?:language=fr-FR&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)**
 
-👉 **[Consulter le Tableau de bord interactif en ligne](https://public.tableau.com/app/profile/alexis.claudeon/viz/ExecutiveSalesDashboard-RetailAnalytics/Tableaudebord1)**
-
-> *Note d'architecture : Pour les besoins de la publication sur la version gratuite de Tableau Public, les données nettoyées ont été extraites sous forme de Snapshot CSV sécurisé. En environnement d'entreprise réel, Tableau Desktop maintient une connexion en direct (Live/Extract planifié) avec le warehouse Snowflake (`TRANSFORMING_WH`) pour un rafraîchissement 100% automatisé.*
+> *Note : Pour Tableau Public (version gratuite), les données sont exportées en CSV depuis Snowflake. En environnement d'entreprise, Tableau Desktop maintient une connexion live avec Snowflake pour un rafraîchissement automatisé.*
 
 ---
 
 ## 🚀 Guide d'Exécution Local
 
-Pour reproduire ou tester ce pipeline de données sur votre machine :
+### Prérequis
 
-### 1. Prérequis
+- Python 3.9+
+- Compte Snowflake actif
 
-* Python 3.9+ installé
-* Un compte Snowflake actif configuré avec les accès appropriés
-
-### 2. Installation de l'environnement
-
-Cloner le dépôt et configurer l'environnement virtuel Python :
+### Installation
 
 ```powershell
-python -m venv .venv
-.\\.venv\\Scripts\\activate
-pip install dbt-snowflake
+# Cloner le repo
+git clone https://github.com/Alexis45140/dbt-snowflake-retail-analytics.git
+cd dbt-snowflake-retail-analytics
 
+# Créer et activer le venv
+python -m venv .venv
+.venv\Scripts\activate
+
+# Installer dbt
+pip install dbt-snowflake
 ```
 
-### 3. Configuration de la connexion dbt (`profiles.yml`)
+### Configuration
 
-Assurez-vous d'avoir configuré votre fichier `profiles.yml` (généralement situé dans `~/.dbt/`) avec vos identifiants Snowflake, votre rôle de sécurité, ainsi que le chemin d'accès vers votre clé privée (`rsa_key.p8`) si applicable.
+Configurer `~/.dbt/profiles.yml` avec vos identifiants Snowflake :
 
-### 4. Déploiement du Pipeline
+```yaml
+mon_projet:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: TON_ACCOUNT        # ex: abc123.eu-west-1
+      user: TON_USER
+      password: TON_PASSWORD
+      database: ANALYTICS
+      schema: ANALYTICS
+      warehouse: TON_WAREHOUSE
+```
 
-Exécuter la séquence de commandes dbt suivantes dans votre terminal :
+### Déploiement
 
 ```powershell
-# 1. Télécharger les dépendances et packages d'extension (dbt_expectations)
+# 1. Installer les packages dbt
 dbt deps
 
-# 2. Charger le jeu de données CSV brut dans Snowflake
+# 2. Charger le CSV dans Snowflake
 dbt seed
 
-# 3. Compiler et exécuter les modèles de transformation SQL (Staging & Marts)
+# 3. Exécuter les modèles
 dbt run
 
-# 4. Lancer la suite de tests automatisés pour valider la qualité des données
+# 4. Lancer les tests qualité
 dbt test
+
+# 5. Générer la documentation
+dbt docs generate
+dbt docs serve
 ```
 
-## 👤 CONTACT
-**Alexis Claudeon**
-* [Mon Profil LinkedIn](https://www.linkedin.com/in/alexis-claudeon/)
-* [Mon Portfolio](https://github.com/alexis45140)
+---
+
+## 👤 Auteur
+
+**Alexis Claudeon** — Data Analyst | Analytics Engineer Junior
+
+- 🐙 [GitHub](https://github.com/Alexis45140)
+- 💼 [LinkedIn](https://www.linkedin.com/in/alexis-claudeon)
