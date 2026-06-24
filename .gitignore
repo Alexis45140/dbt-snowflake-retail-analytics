@@ -11,6 +11,10 @@ logs/
 *.p8
 *.yml.local
 profiles.yml
+*.pub
+rsa_key*
+generer_cles.py
+data/
 
 # Python
 __pycache__/
