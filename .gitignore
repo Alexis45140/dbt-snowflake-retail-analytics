@@ -17,6 +17,10 @@ rsa_key*
 generer_cles.py
 data/
 
+snapshots/
+
+
+
 # Python
 __pycache__/
 *.pyc
