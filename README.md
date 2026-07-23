@@ -1,30 +1,37 @@
-# 🛍️ Pipeline Data ELT — Retail Analytics (dbt Core × Snowflake × Tableau)
+# 🛍️ Pipeline Data ELT + ML — Retail Analytics (dbt Core × Snowflake × BigQuery × Tableau)
 
-Ce dépôt héberge un projet complet de **Modern Data Stack** simulant un environnement de production pour un **Analytics Engineer**. L'objectif est d'ingérer des données brutes de ventes au détail, de les transformer avec **dbt Core** dans **Snowflake**, de valider la qualité des données via des tests automatisés, et de restituer des KPIs dans un **dashboard Tableau interactif**.
+Ce dépôt héberge un projet complet de **Modern Data Stack enrichi d'une couche Machine Learning**, simulant un environnement de production pour un **Analytics Engineer**. L'objectif est d'ingérer des données brutes de ventes au détail, de les transformer avec **dbt Core**, de valider la qualité des données, d'enrichir le pipeline avec des modèles ML (segmentation client et prédiction), et de restituer des KPIs dans un **dashboard Tableau interactif**.
 
 ---
 
-## 🏗️ Architecture Globale du Pipeline (ELT)
+## 🏗️ Architecture Globale du Pipeline (ELT + ML)
 
 ```
 CSV (1 000 transactions)
         ↓
-   Snowflake (ANALYTICS.ANALYTICS)
+   Snowflake / BigQuery
         ↓
    dbt Core — Staging (stg_retail)
         ↓
    dbt Core — Marts (mart_kpis / mart_ca_mensuel / mart_performance_categorie)
         ↓
+   ML — Clustering K-means (segmentation clients)
+   ML — Random Forest (prédiction montant d'achat)
+        ↓
+   dbt Core — mart_predictions (segments intégrés au pipeline)
+        ↓
    Tableau Public (Dashboard interactif)
 ```
 
-Le pipeline suit une approche **ELT** moderne :
+Le pipeline suit une approche **ELT** moderne enrichie d'une couche analytique IA :
 
-1. **Extract & Load** — Chargement du fichier CSV brut dans Snowflake via `dbt seed`
-2. **Staging** — Nettoyage, typage et normalisation des colonnes (snake_case, casting Snowflake)
+1. **Extract & Load** — Chargement du CSV brut via `dbt seed`
+2. **Staging** — Nettoyage, typage et normalisation des colonnes
 3. **Marts** — Modélisation orientée métier : KPIs globaux, évolution mensuelle, performance par catégorie
-4. **Data Quality** — Tests automatisés (unicité, nullité, plages de valeurs) via dbt native + `dbt_expectations`
-5. **BI** — Restitution visuelle sur Tableau Public
+4. **Machine Learning** — Segmentation K-means (3 profils clients) + prédiction Random Forest (MAE ~484€)
+5. **Mart Prédictions** — Intégration des segments ML dans le pipeline dbt
+6. **Data Quality** — 6 tests automatisés via dbt native + `dbt_expectations`
+7. **BI** — Restitution visuelle sur Tableau Public
 
 ---
 
@@ -32,9 +39,12 @@ Le pipeline suit une approche **ELT** moderne :
 
 | Outil | Rôle |
 |---|---|
-| **Snowflake** | Cloud Data Warehouse — stockage et calcul |
-| **dbt Core v1.11** | Transformation SQL modulaire — staging et marts |
+| **Snowflake** | Cloud Data Warehouse (version originale) |
+| **Google BigQuery** | Cloud Data Warehouse (version ML) |
+| **dbt Core v1.12** | Transformation SQL modulaire — staging et marts |
 | **dbt_expectations** | Tests avancés de qualité des données |
+| **scikit-learn** | Clustering K-means + Random Forest |
+| **pandas** | Manipulation et préparation des données ML |
 | **Tableau Public** | Visualisation et dashboard interactif |
 | **Git & GitHub** | Versioning et collaboration |
 
@@ -48,16 +58,22 @@ dbt-snowflake-retail-analytics/
 ├── dbt_project.yml
 ├── packages.yml
 ├── seeds/
-│   └── retail_sales_dataset.csv
+│   ├── retail_sales_dataset.csv       ← données brutes (1 000 transactions)
+│   └── retail_predictions.csv         ← segments ML (généré par clustering.py)
+├── ml/
+│   ├── clustering.py                  ← segmentation K-means (3 profils clients)
+│   ├── predictions.py                 ← prédiction Random Forest (MAE ~484€)
+│   └── requirements_ml.txt            ← dépendances ML
 └── models/
     ├── staging/
     │   ├── sources.yml
+    │   ├── schema.yml
     │   └── stg_retail.sql
-    ├── marts/
-    │   ├── mart_kpis.sql
-    │   ├── mart_ca_mensuel.sql
-    │   └── mart_performance_categorie.sql
-    └── schema.yml
+    └── marts/
+        ├── mart_kpis.sql
+        ├── mart_ca_mensuel.sql
+        ├── mart_performance_categorie.sql
+        └── mart_predictions.sql       ← segments ML intégrés au pipeline dbt
 ```
 
 ---
@@ -66,7 +82,7 @@ dbt-snowflake-retail-analytics/
 
 ### 1. Couche Staging — `stg_retail.sql` (Vue)
 
-Isole la donnée brute. Normalise les colonnes Snowflake (majuscules → snake_case), applique le typage précis et enrichit avec des colonnes calculées (mois, année, tranche d'âge).
+Isole la donnée brute. Normalise les colonnes, applique le typage précis et enrichit avec des colonnes calculées (mois, année, tranche d'âge).
 
 ```sql
 {{ config(materialized='view') }}
@@ -107,7 +123,7 @@ SELECT * FROM renamed
 
 ---
 
-### 2. Couche Marts — 3 tables orientées métier
+### 2. Couche Marts — 4 tables orientées métier
 
 #### `mart_kpis.sql` — KPIs Globaux (Table)
 
@@ -131,15 +147,14 @@ FROM {{ ref('stg_retail') }}
 {{ config(materialized='table') }}
 
 SELECT
-    mois_debut,
-    annee,
-    mois,
+    mois_debut, annee, mois, categorie_produit,
     COUNT(transaction_id)        AS nb_commandes,
     SUM(montant_total)           AS ca_mensuel,
     ROUND(AVG(montant_total), 2) AS panier_moyen,
     COUNT(DISTINCT customer_id)  AS nb_clients
 FROM {{ ref('stg_retail') }}
-GROUP BY mois_debut, annee, mois
+WHERE categorie_produit IS NOT NULL
+GROUP BY mois_debut, annee, mois, categorie_produit
 ORDER BY mois_debut
 ```
 
@@ -154,59 +169,81 @@ SELECT
     SUM(montant_total)           AS ca_total,
     ROUND(AVG(montant_total), 2) AS panier_moyen,
     COUNT(DISTINCT customer_id)  AS nb_clients,
-    ROUND(
-        SUM(montant_total) * 100.0 /
-        SUM(SUM(montant_total)) OVER (), 1
-    )                            AS part_ca_pct
+    ROUND(SUM(montant_total) * 100.0 / SUM(SUM(montant_total)) OVER (), 1) AS part_ca_pct
 FROM {{ ref('stg_retail') }}
 GROUP BY categorie_produit
 ORDER BY ca_total DESC
 ```
 
+#### `mart_predictions.sql` — Segments ML intégrés (Table)
+
+```sql
+{{ config(materialized='table') }}
+
+SELECT
+    s.customer_id, s.genre, s.age, s.tranche_age,
+    SUM(s.montant_total)           AS ca_total,
+    COUNT(s.transaction_id)        AS nb_achats,
+    ROUND(AVG(s.montant_total), 2) AS panier_moyen,
+    p.segment, p.segment_label
+FROM {{ ref('stg_retail') }} s
+LEFT JOIN {{ ref('retail_predictions') }} p ON s.customer_id = p.customer_id
+GROUP BY s.customer_id, s.genre, s.age, s.tranche_age, p.segment, p.segment_label
+ORDER BY ca_total DESC
+```
+
+---
+
+## 🤖 Couche Machine Learning
+
+### Clustering K-means — `ml/clustering.py`
+
+Segmente automatiquement les 1 000 clients en **3 profils comportementaux** basés sur leur CA total, nombre d'achats, panier moyen et diversité catégorielle.
+
+| Segment | Nb clients | CA moyen | Part |
+|---|---|---|---|
+| **Petit acheteur** | 701 | 131€ | 70% |
+| **Acheteur régulier** | 200 | 953€ | 20% |
+| **Gros acheteur** | 99 | 1 747€ | 10% |
+
+> 10% des clients génèrent en moyenne 1 747€ de CA chacun — soit 13x plus que les petits acheteurs.
+
+### Random Forest — `ml/predictions.py`
+
+Prédit le montant d'achat à partir du profil client (âge, catégorie, genre).
+
+| Métrique | Valeur |
+|---|---|
+| **MAE** | 483.72€ |
+| **Split train/test** | 800 / 200 |
+| **Arbres** | 100 |
+| **Facteur dominant** | Age (60.6%) |
+
+> **Note** : Une première version incluait `prix_unitaire` et `quantite` (MAE = 0€, data leakage détecté et corrigé — `montant_total = prix_unitaire × quantite`).
+
 ---
 
 ## 🧪 Qualité des Données & Tests Automatisés
 
-Tests déclarés dans `models/schema.yml` pour garantir le principe de **Single Source of Truth** :
+6 tests déclarés dans `models/staging/schema.yml` :
 
-```yaml
-version: 2
-
-models:
-  - name: stg_retail
-    description: "Staging retail — données nettoyées et typées"
-    columns:
-      - name: transaction_id
-        tests:
-          - unique
-          - not_null
-      - name: montant_total
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_between:
-              arguments:
-                min_value: 0
-                max_value: 10000
-      - name: categorie_produit
-        tests:
-          - not_null
-          - accepted_values:
-              values: ['Beauty', 'Clothing', 'Electronics']
-```
+| Test | Type | Colonne |
+|---|---|---|
+| `unique` | Natif dbt | transaction_id |
+| `not_null` | Natif dbt | transaction_id, montant_total, categorie_produit |
+| `expect_column_values_to_be_between` | dbt_expectations | montant_total (0 → 10 000€) |
+| `accepted_values` | Natif dbt | categorie_produit (Beauty, Clothing, Electronics) |
 
 ---
 
 ## 📊 Dashboard Tableau Public
 
-Les marts dbt alimentent un dashboard interactif comprenant :
-
 - **KPIs globaux** — CA total, nombre de commandes, panier moyen
-- **Évolution mensuelle** — Courbe de tendance des ventes sur l'année
+- **Évolution mensuelle** — Courbe de tendance des ventes
 - **Performance par catégorie** — Comparaison Beauty / Clothing / Electronics
+- **Filtres dynamiques** — Par mois et par catégorie produit
 
 👉 **[Consulter le dashboard interactif](https://public.tableau.com/views/RetailAnalyticsSalesDashboard_17815243980290/Tableaudebord1?:language=fr-FR&:sid=&:redirect=auth&:display_count=n&:origin=viz_share_link)**
-
-> *Note : Pour Tableau Public (version gratuite), les données sont exportées en CSV depuis Snowflake. En environnement d'entreprise, Tableau Desktop maintient une connexion live avec Snowflake pour un rafraîchissement automatisé.*
 
 ---
 
@@ -215,59 +252,35 @@ Les marts dbt alimentent un dashboard interactif comprenant :
 ### Prérequis
 
 - Python 3.9+
-- Compte Snowflake actif
+- Compte Snowflake ou projet Google BigQuery
 
 ### Installation
 
 ```powershell
-# Cloner le repo
 git clone https://github.com/Alexis45140/dbt-snowflake-retail-analytics.git
 cd dbt-snowflake-retail-analytics
 
-# Créer et activer le venv
+# Venv dbt
 python -m venv .venv
-.venv\Scripts\activate
+.venv\Scripts\Activate.ps1
+pip install dbt-snowflake        # ou dbt-bigquery
 
-# Installer dbt
-pip install dbt-snowflake
-```
-
-### Configuration
-
-Configurer `~/.dbt/profiles.yml` avec vos identifiants Snowflake :
-
-```yaml
-mon_projet:
-  target: dev
-  outputs:
-    dev:
-      type: snowflake
-      account: TON_ACCOUNT        # ex: abc123.eu-west-1
-      user: TON_USER
-      password: TON_PASSWORD
-      database: ANALYTICS
-      schema: ANALYTICS
-      warehouse: TON_WAREHOUSE
+# Venv ML (séparé)
+python -m venv .venv_ml
+.venv_ml\Scripts\Activate.ps1
+pip install -r ml/requirements_ml.txt
 ```
 
 ### Déploiement
 
 ```powershell
-# 1. Installer les packages dbt
-dbt deps
-
-# 2. Charger le CSV dans Snowflake
-dbt seed
-
-# 3. Exécuter les modèles
-dbt run
-
-# 4. Lancer les tests qualité
-dbt test
-
-# 5. Générer la documentation
-dbt docs generate
-dbt docs serve
+dbt deps                         # 1. Packages dbt
+dbt seed                         # 2. Chargement données brutes
+dbt run                          # 3. Transformations
+dbt test                         # 4. Tests qualité
+python ml/clustering.py          # 5. Génération segments ML
+python ml/predictions.py         # 6. Prédiction Random Forest
+dbt seed && dbt run --select mart_predictions  # 7. Intégration ML → dbt
 ```
 
 ---

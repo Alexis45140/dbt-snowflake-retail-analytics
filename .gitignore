@@ -1,5 +1,7 @@
 # Environnement virtuel Python
 .venv/
+.venv_ml/
+.venv_bq/
 venv/
 
 # Fichiers de compilation dbt
@@ -12,14 +14,11 @@ logs/
 *.pub
 *.yml.local
 profiles.yml
-*.pub
 rsa_key*
 generer_cles.py
+
+# Données locales
 data/
-
-snapshots/
-
-
 
 # Python
 __pycache__/
