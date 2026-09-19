@@ -1,8 +1,10 @@
 """
-Segmentation clients — Clustering K-means
-==========================================
-Ce script segmente les clients du dataset Retail Analytics
-en 3 profils comportementaux via un algorithme K-means.
+Clustering K-means sur les montants d'achat
+============================================
+Ce script regroupe les clients du dataset Retail Analytics en 3 groupes
+via un algorithme K-means. Le jeu de données compte 1 achat par client :
+nombre d'achats et diversité catégorielle sont constants, le regroupement
+porte donc en pratique sur le montant d'achat (pas de profil comportemental).
 
 Input  : seeds/retail_sales_dataset.csv
 Output : seeds/retail_predictions.csv (customer_id, segment, segment_label)
