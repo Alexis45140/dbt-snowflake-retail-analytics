@@ -1,6 +1,6 @@
 # 🛍️ Pipeline Data ELT + ML — Retail Analytics (dbt Core × Snowflake × BigQuery × Tableau)
 
-Ce dépôt héberge un projet complet de **Modern Data Stack enrichi d'une couche Machine Learning**, simulant un environnement de production pour un **Analytics Engineer**. L'objectif est d'ingérer des données brutes de ventes au détail, de les transformer avec **dbt Core**, de valider la qualité des données, d'enrichir le pipeline avec des modèles ML (segmentation client et prédiction), et de restituer des KPIs dans un **dashboard Tableau interactif**.
+Ce dépôt héberge un projet complet de **Modern Data Stack enrichi d'une couche Machine Learning**, simulant un environnement de production pour un **Analytics Engineer**. L'objectif est d'ingérer des données brutes de ventes au détail, de les transformer avec **dbt Core**, de valider la qualité des données, d'enrichir le pipeline avec des modèles ML (clustering K-means sur les montants d'achat et prédiction Random Forest), et de restituer des KPIs dans un **dashboard Tableau interactif**.
 
 ---
 
@@ -15,10 +15,10 @@ CSV (1 000 transactions)
         ↓
    dbt Core — Marts (mart_kpis / mart_ca_mensuel / mart_performance_categorie)
         ↓
-   ML — Clustering K-means (segmentation clients)
+   ML — Clustering K-means (montants d'achat)
    ML — Random Forest (prédiction montant d'achat)
         ↓
-   dbt Core — mart_predictions (segments intégrés au pipeline)
+   dbt Core — mart_predictions (clusters intégrés au pipeline)
         ↓
    Tableau Public (Dashboard interactif)
 ```
@@ -28,8 +28,8 @@ Le pipeline suit une approche **ELT** moderne enrichie d'une couche analytique I
 1. **Extract & Load** — Chargement du CSV brut via `dbt seed`
 2. **Staging** — Nettoyage, typage et normalisation des colonnes
 3. **Marts** — Modélisation orientée métier : KPIs globaux, évolution mensuelle, performance par catégorie
-4. **Machine Learning** — Segmentation K-means (3 profils clients) + prédiction Random Forest (MAE ~484€)
-5. **Mart Prédictions** — Intégration des segments ML dans le pipeline dbt
+4. **Machine Learning** — Clustering K-means sur les montants d'achat (3 groupes) + prédiction Random Forest (MAE ~484€, fuite de données corrigée)
+5. **Mart Prédictions** — Intégration des clusters ML dans le pipeline dbt
 6. **Data Quality** — 6 tests automatisés via dbt native + `dbt_expectations`
 7. **BI** — Restitution visuelle sur Tableau Public
 
@@ -59,9 +59,9 @@ dbt-snowflake-retail-analytics/
 ├── packages.yml
 ├── seeds/
 │   ├── retail_sales_dataset.csv       ← données brutes (1 000 transactions)
-│   └── retail_predictions.csv         ← segments ML (généré par clustering.py)
+│   └── retail_predictions.csv         ← clusters ML (généré par clustering.py)
 ├── ml/
-│   ├── clustering.py                  ← segmentation K-means (3 profils clients)
+│   ├── clustering.py                  ← clustering K-means (montants d'achat)
 │   ├── predictions.py                 ← prédiction Random Forest (MAE ~484€)
 │   └── requirements_ml.txt            ← dépendances ML
 └── models/
@@ -73,7 +73,7 @@ dbt-snowflake-retail-analytics/
         ├── mart_kpis.sql
         ├── mart_ca_mensuel.sql
         ├── mart_performance_categorie.sql
-        └── mart_predictions.sql       ← segments ML intégrés au pipeline dbt
+        └── mart_predictions.sql       ← clusters ML intégrés au pipeline dbt
 ```
 
 ---
@@ -175,7 +175,7 @@ GROUP BY categorie_produit
 ORDER BY ca_total DESC
 ```
 
-#### `mart_predictions.sql` — Segments ML intégrés (Table)
+#### `mart_predictions.sql` — Clusters ML intégrés (Table)
 
 ```sql
 {{ config(materialized='table') }}
@@ -198,9 +198,9 @@ ORDER BY ca_total DESC
 
 ### Clustering K-means — `ml/clustering.py`
 
-Segmente automatiquement les 1 000 clients en **3 profils comportementaux** basés sur leur CA total, nombre d'achats, panier moyen et diversité catégorielle.
+Regroupe les 1 000 clients en **3 groupes selon leur montant d'achat**. Le jeu de données compte ~1 achat par client : nombre d'achats et diversité catégorielle sont constants, le clustering porte donc en pratique sur le montant (CA total = panier moyen) — ce n'est pas une segmentation comportementale.
 
-| Segment | Nb clients | CA moyen | Part |
+| Groupe (libellé du code) | Nb clients | CA moyen | Part |
 |---|---|---|---|
 | **Petit acheteur** | 701 | 131€ | 70% |
 | **Acheteur régulier** | 200 | 953€ | 20% |
@@ -278,7 +278,7 @@ dbt deps                         # 1. Packages dbt
 dbt seed                         # 2. Chargement données brutes
 dbt run                          # 3. Transformations
 dbt test                         # 4. Tests qualité
-python ml/clustering.py          # 5. Génération segments ML
+python ml/clustering.py          # 5. Génération des clusters ML
 python ml/predictions.py         # 6. Prédiction Random Forest
 dbt seed && dbt run --select mart_predictions  # 7. Intégration ML → dbt
 ```
