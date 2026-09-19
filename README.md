@@ -28,7 +28,7 @@ Le pipeline suit une approche **ELT** moderne enrichie d'une couche analytique I
 1. **Extract & Load** — Chargement du CSV brut via `dbt seed`
 2. **Staging** — Nettoyage, typage et normalisation des colonnes
 3. **Marts** — Modélisation orientée métier : KPIs globaux, évolution mensuelle, performance par catégorie
-4. **Machine Learning** — Clustering K-means sur les montants d'achat (3 groupes) + prédiction Random Forest (MAE ~484€, fuite de données corrigée)
+4. **Machine Learning** — Clustering K-means sur les montants d'achat (3 groupes) + prédiction Random Forest (MAE ~484€, fuite de données corrigée, comparée à une baseline)
 5. **Mart Prédictions** — Intégration des clusters ML dans le pipeline dbt
 6. **Data Quality** — 6 tests automatisés via dbt native + `dbt_expectations`
 7. **BI** — Restitution visuelle sur Tableau Public
@@ -62,7 +62,7 @@ dbt-snowflake-retail-analytics/
 │   └── retail_predictions.csv         ← clusters ML (généré par clustering.py)
 ├── ml/
 │   ├── clustering.py                  ← clustering K-means (montants d'achat)
-│   ├── predictions.py                 ← prédiction Random Forest (MAE ~484€)
+│   ├── predictions.py                 ← prédiction Random Forest vs baseline (MAE ~484€ / ~448€)
 │   └── requirements_ml.txt            ← dépendances ML
 └── models/
     ├── staging/
@@ -210,16 +210,19 @@ Regroupe les 1 000 clients en **3 groupes selon leur montant d'achat**. Le jeu d
 
 ### Random Forest — `ml/predictions.py`
 
-Prédit le montant d'achat à partir du profil client (âge, catégorie, genre).
+Prédit le montant d'achat à partir du profil client (âge, catégorie, genre), puis compare le résultat à une baseline naïve qui prédit toujours le montant moyen.
 
 | Métrique | Valeur |
 |---|---|
 | **MAE** | 483.72€ |
+| **MAE baseline (moyenne)** | 448.01€ |
 | **Split train/test** | 800 / 200 |
 | **Arbres** | 100 |
 | **Facteur dominant** | Age (60.6%) |
 
 > **Note** : Une première version incluait `prix_unitaire` et `quantite` (MAE = 0€, data leakage détecté et corrigé — `montant_total = prix_unitaire × quantite`).
+
+> **Baseline** : sans les variables à l'origine de la fuite, le Random Forest (MAE 483.72€) ne fait pas mieux qu'une prédiction constante égale à la moyenne (MAE 448.01€). Âge, genre et catégorie ne permettent donc pas de prédire le montant d'achat sur ce jeu de données : la comparaison à la baseline évite de présenter comme utile un modèle qui ne l'est pas.
 
 ---
 
