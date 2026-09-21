@@ -28,9 +28,9 @@ Le pipeline suit une approche **ELT** moderne enrichie d'une couche analytique I
 1. **Extract & Load** — Chargement du CSV brut via `dbt seed`
 2. **Staging** — Nettoyage, typage et normalisation des colonnes
 3. **Marts** — Modélisation orientée métier : KPIs globaux, évolution mensuelle, performance par catégorie
-4. **Machine Learning** — Clustering K-means sur les montants d'achat (3 groupes) + prédiction Random Forest (MAE ~484€, fuite de données corrigée, comparée à une baseline)
+4. **Machine Learning** — Clustering K-means sur les montants d'achat (3 groupes) + prédiction Random Forest (MAE 483.72€ contre 448.01€ pour la baseline : le modèle ne la bat pas ; fuite de données détectée et corrigée)
 5. **Mart Prédictions** — Intégration des clusters ML dans le pipeline dbt
-6. **Data Quality** — 6 tests automatisés via dbt native + `dbt_expectations`
+6. **Data Quality** — 6 tests déclarés via dbt natif + `dbt_expectations`
 7. **BI** — Restitution visuelle sur Tableau Public
 
 ---
@@ -42,7 +42,7 @@ Le pipeline suit une approche **ELT** moderne enrichie d'une couche analytique I
 | **Snowflake** | Cloud Data Warehouse (version originale) |
 | **Google BigQuery** | Cloud Data Warehouse (version ML) |
 | **dbt Core v1.12** | Transformation SQL modulaire — staging et marts |
-| **dbt_expectations** | Tests avancés de qualité des données |
+| **dbt_expectations** | Tests de qualité au-delà des tests natifs dbt |
 | **scikit-learn** | Clustering K-means + Random Forest |
 | **pandas** | Manipulation et préparation des données ML |
 | **Tableau Public** | Visualisation et dashboard interactif |
@@ -218,7 +218,7 @@ Prédit le montant d'achat à partir du profil client (âge, catégorie, genre),
 | **MAE baseline (moyenne)** | 448.01€ |
 | **Split train/test** | 800 / 200 |
 | **Arbres** | 100 |
-| **Facteur dominant** | Age (60.6%) |
+| **Variable la plus utilisée par les splits** | Age (60.6%) — sans portée prédictive, voir la baseline |
 
 > **Note** : Une première version incluait `prix_unitaire` et `quantite` (MAE = 0€, data leakage détecté et corrigé — `montant_total = prix_unitaire × quantite`).
 
@@ -226,7 +226,7 @@ Prédit le montant d'achat à partir du profil client (âge, catégorie, genre),
 
 ---
 
-## 🧪 Qualité des Données & Tests Automatisés
+## 🧪 Qualité des Données & Tests dbt
 
 6 tests déclarés dans `models/staging/schema.yml` :
 
